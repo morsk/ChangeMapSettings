@@ -50,7 +50,7 @@ gui.regen = function(player)
     direction = "vertical"
   }
   map_gen_frame.drag_target = main_flow
-  gui.make_map_gen_settings(map_gen_frame)
+  gui.make_map_gen_settings(map_gen_frame, player.surface)
 
   -- start button at the bottom
   gui.make_start_button(map_gen_frame, true)
@@ -172,7 +172,7 @@ gui.make_start_button = function(parent, map_gen)
   }
 end
 
-gui.make_map_gen_settings = function(parent)
+gui.make_map_gen_settings = function(parent, surface)
   local inner_frame = parent.add{
     type = "frame",
     direction = "vertical",
@@ -258,7 +258,7 @@ gui.make_map_gen_settings = function(parent)
     name = "change-map-settings-map-gen-flow",
     direction = "horizontal"
   }
-  map_gen_gui.create(map_gen_flow)
+  map_gen_gui.create(map_gen_flow, surface)
 end
 
 gui.get_map_gen_settings_container = function(player)

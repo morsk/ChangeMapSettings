@@ -11,7 +11,7 @@ local function reset_to_default_map_gen_settings(player)
   gui.get_preset_dropdown(player).selected_index = 0
 
   --the rest
-  map_gen_gui.reset_to_defaults(gui.get_map_gen_settings_container(player))
+  map_gen_gui.reset_to_defaults(gui.get_map_gen_settings_container(player), player.surface)
 end
 
 local function reset_to_default_map_settings(player)
@@ -35,7 +35,7 @@ local function set_to_current_map_gen_settings(player)
   gui.get_preset_dropdown(player).selected_index = 0
 
   --the rest
-  map_gen_gui.set_to_current(gui.get_map_gen_settings_container(player), map_gen_settings)
+  map_gen_gui.set_to_current(gui.get_map_gen_settings_container(player), player.surface, map_gen_settings)
 end
 
 local function set_to_current_map_settings(player)
@@ -115,7 +115,7 @@ end
 
 local function change_map_gen_settings(player)
   --all the stuff
-  local status, settings = pcall(map_gen_gui.read, gui.get_map_gen_settings_container(player), player.surface.map_gen_settings)
+  local status, settings = pcall(map_gen_gui.read, gui.get_map_gen_settings_container(player), player.surface, player.surface.map_gen_settings)
   if not status then
     player.print(settings)
     player.print({"msg.change-map-settings-apply-failed"})
@@ -196,14 +196,14 @@ script.on_event(defines.events.on_gui_selection_state_changed, function(event)
 
   -- reset to default first
   -- gui.get_seed_field(player).text = "0" -- not for now, makes it hard to keep the seed the same when browsing settings
-  map_gen_gui.reset_to_defaults(gui.get_map_gen_settings_container(player))
+  map_gen_gui.reset_to_defaults(gui.get_map_gen_settings_container(player), player.surface)
 
   -- then set up the preset
   -- {"map-gen-preset-name." .. preset_name}
   local preset_name = item[1]:sub(string.len("map-gen-preset-name.") + 1)
   local preset = prototypes.map_gen_preset[preset_name]
 
-  map_gen_gui.set_to_current(gui.get_map_gen_settings_container(player), preset.basic_settings)
+  map_gen_gui.set_to_current(gui.get_map_gen_settings_container(player), player.surface, preset.basic_settings)
 end)
 
 script.on_configuration_changed(function() --migration

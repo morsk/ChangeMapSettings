@@ -4,7 +4,25 @@ local GUI_PREFIX = "map-gen-"
 local ENTIRE_PREFIX = MOD_PREFIX .. GUI_PREFIX
 local map_gen_gui = {}
 
-map_gen_gui.create = function(parent)
+-- @param surface LuaSurface
+-- @param control LuaAutoplaceControlPrototype
+-- @return true or false
+local function surface_uses_control(surface, control)
+  local result
+  if (surface.map_gen_settings.autoplace_controls and
+      surface.map_gen_settings.autoplace_controls[control.name] and
+      surface.map_gen_settings.autoplace_controls[control.name].size > 0) then
+      -- If it's already in the settings, however it got there, we recognize it.
+    result = true
+  else
+    -- false by default because this is what /editor does for space
+    -- platforms. Everything is grayed out.
+    result = false
+  end
+  return result
+end
+
+map_gen_gui.create = function(parent, surface)
   local frame1 = parent.add{
     type = "frame",
     direction = "vertical",
@@ -25,8 +43,8 @@ map_gen_gui.create = function(parent)
     style ="scroll_pane_in_shallow_frame"
   }
   resource_scroll_pane.style.maximal_height = 300
-  map_gen_gui.create_resource_table(resource_scroll_pane)
-  map_gen_gui.create_enemies_table(frame1)
+  map_gen_gui.create_resource_table(resource_scroll_pane, surface)
+  map_gen_gui.create_enemies_table(frame1, surface)
 
 
   map_gen_gui.create_expression_selectors(map_gen_gui.create_expression_selectors_parent(frame2))
@@ -36,7 +54,7 @@ map_gen_gui.create = function(parent)
     style ="scroll_pane_in_shallow_frame"
   }
   terrain_scroll_pane.style.maximal_height = 150
-  map_gen_gui.create_controls_with_scale_table(terrain_scroll_pane)
+  map_gen_gui.create_controls_with_scale_table(terrain_scroll_pane, surface)
   map_gen_gui.create_cliffs_table(frame2)
   map_gen_gui.create_climate_table(frame2)
 end
@@ -115,7 +133,7 @@ map_gen_gui.get_expression_dropdown_data = function(expressions)
   return {items = items, selected_index = selected_index}
 end
 
-map_gen_gui.create_resource_table = function(parent)
+map_gen_gui.create_resource_table = function(parent, surface)
   local table = parent.add{
     type = "table",
     name = ENTIRE_PREFIX .. "resource-table",
@@ -147,12 +165,12 @@ map_gen_gui.create_resource_table = function(parent)
   -- resources
   for _, control in pairs(prototypes.autoplace_control) do
     if control.category == "resource" then
-      map_gen_gui.make_autoplace_options(control.name, table, true, control)
+      map_gen_gui.make_autoplace_options(control.name, table, true, control, surface)
     end
   end
 end
 
-map_gen_gui.create_controls_with_scale_table = function(parent)
+map_gen_gui.create_controls_with_scale_table = function(parent, surface)
   local table = parent.add{
     type = "table",
     name = ENTIRE_PREFIX .. "controls-with-scale-table",
@@ -178,7 +196,7 @@ map_gen_gui.create_controls_with_scale_table = function(parent)
   -- trees and custom mod stuff
   for _, control in pairs(prototypes.autoplace_control) do
     if control.category == "terrain" and control.name ~= "planet-size" then -- planet size is a space exploration thing, we don't want the player to change it
-      map_gen_gui.make_autoplace_options(control.name, table, false, control)
+        map_gen_gui.make_autoplace_options(control.name, table, false, control, surface)
     end
   end
 end
@@ -237,7 +255,7 @@ map_gen_gui.create_climate_table = function(parent)
   map_gen_gui.make_autoplace_options("aux", table, false)
 end
 
-map_gen_gui.create_enemies_table = function(parent)
+map_gen_gui.create_enemies_table = function(parent, surface)
   local table = parent.add{
     type = "table",
     name = ENTIRE_PREFIX .. "enemies-table",
@@ -263,7 +281,7 @@ map_gen_gui.create_enemies_table = function(parent)
   -- biter bases
   for _, control in pairs(prototypes.autoplace_control) do
     if control.category == "enemy" then
-      map_gen_gui.make_autoplace_options(control.name, table, false, control)
+      map_gen_gui.make_autoplace_options(control.name, table, false, control, surface)
     end
   end
 
@@ -286,8 +304,8 @@ end
 
 -- autoplace is optional
 -- if autoplace is provided, the localised name is taken from there
-map_gen_gui.make_autoplace_options = function(name, parent, has_richness, autoplace)
-  map_gen_gui.make_autoplace_label(name, parent, autoplace)
+map_gen_gui.make_autoplace_options = function(name, parent, has_richness, autoplace, surface)
+  map_gen_gui.make_autoplace_label(name, parent, autoplace, surface)
   parent.add{
     type = "textfield",
     name = ENTIRE_PREFIX .. name .. "-freq",
@@ -325,17 +343,30 @@ local autoplace_name_locale =
 }
 
 -- if autoplace is provided, the localised name is taken from there
-map_gen_gui.make_autoplace_label = function(name, parent, autoplace)
-  local label = parent.add{
-    type = "label"
-  }
+map_gen_gui.make_autoplace_label = function(name, parent, autoplace, surface)
+  local label
 
   if autoplace then
+    -- an autoplace has a flow with (checkbox, label)
+    local flow = parent.add {
+      type = "flow",
+      name = ENTIRE_PREFIX .. name .. "-check-wrapper",
+      direction = "horizontal"
+    }
+    flow.add {
+      type = "checkbox",
+      name = "check",
+      state = surface_uses_control(surface, autoplace)
+    }
+    label = flow.add{type = "label"}
+
     label.caption = autoplace.localised_name
     assert(label.caption ~= "nil")
     return
   end
 
+  -- other things just have a label
+  label = parent.add{type = "label"}
   label.caption = autoplace_name_locale[name]
   if name == "moisture" or name == "aux" then
     label.tooltip = {"gui-map-generator." .. name .. "-description"}
@@ -344,7 +375,7 @@ map_gen_gui.make_autoplace_label = function(name, parent, autoplace)
   assert(label.caption ~= "nil")
 end
 
-map_gen_gui.reset_to_defaults = function(parent)
+map_gen_gui.reset_to_defaults = function(parent, surface)
   local expression_selectors_flow = parent[ENTIRE_PREFIX .. "gui-frame-2"][ENTIRE_PREFIX .. "expression-selectors-table"][ENTIRE_PREFIX .. "expression-selectors-flow"]
   local resource_table = parent[ENTIRE_PREFIX .. "gui-frame-1"][ENTIRE_PREFIX .. "resource-scroll-pane"][ENTIRE_PREFIX .."resource-table"]
   local controls_with_scale_table = parent[ENTIRE_PREFIX .. "gui-frame-2"][ENTIRE_PREFIX .. "terrain-scroll-pane"][ENTIRE_PREFIX .."controls-with-scale-table"]
@@ -365,7 +396,9 @@ map_gen_gui.reset_to_defaults = function(parent)
   -- resources and terrain and enemies
   local autoplace_control_prototypes = prototypes.autoplace_control
   for _, control in pairs(autoplace_control_prototypes) do
-    if control.category == "resource" then
+    if not surface_uses_control(surface, control) then
+      ; -- skip
+    elseif control.category == "resource" then
       resource_table[ENTIRE_PREFIX .. control.name .. "-freq"].text = "1"
       resource_table[ENTIRE_PREFIX .. control.name .. "-size"].text = "1"
       resource_table[ENTIRE_PREFIX .. control.name .. "-richn"].text = "1"
@@ -389,7 +422,7 @@ map_gen_gui.reset_to_defaults = function(parent)
   cliffs_table[ENTIRE_PREFIX .. "cliffs-size"].text = "1"
 end
 
-map_gen_gui.set_to_current = function(parent, map_gen_settings)
+map_gen_gui.set_to_current = function(parent, surface, map_gen_settings)
   local expression_selectors_flow = parent[ENTIRE_PREFIX .. "gui-frame-2"][ENTIRE_PREFIX .. "expression-selectors-table"][ENTIRE_PREFIX .. "expression-selectors-flow"]
   local resource_table = parent[ENTIRE_PREFIX .. "gui-frame-1"][ENTIRE_PREFIX .. "resource-scroll-pane"][ENTIRE_PREFIX .."resource-table"]
   local controls_with_scale_table = parent[ENTIRE_PREFIX .. "gui-frame-2"][ENTIRE_PREFIX .. "terrain-scroll-pane"][ENTIRE_PREFIX .."controls-with-scale-table"]
@@ -434,20 +467,34 @@ map_gen_gui.set_to_current = function(parent, map_gen_settings)
 
   -- resources and terrain and enemies
   local valid_autoplace_controls = prototypes.autoplace_control
-  if autoplace_controls then
-    for name, autoplace_control in pairs(autoplace_controls) do
-      if valid_autoplace_controls[name] then
-        if valid_autoplace_controls[name].category == "resource" then
-          resource_table[ENTIRE_PREFIX .. name .. "-freq"].text = util.number_to_string(util.map_gen_size_to_number(autoplace_control["frequency"]) or 1)
-          resource_table[ENTIRE_PREFIX .. name .. "-size"].text = util.number_to_string(util.map_gen_size_to_number(autoplace_control["size"]) or 1)
-          resource_table[ENTIRE_PREFIX .. name .. "-richn"].text = util.number_to_string(util.map_gen_size_to_number(autoplace_control["richness"]) or 1)
-        elseif valid_autoplace_controls[name].category == "terrain" and name ~= "planet-size" then -- planet size is a space exploration thing, we don't want the player to change it
-          controls_with_scale_table[ENTIRE_PREFIX .. name .. "-freq"].text = util.number_to_string(1 / (util.map_gen_size_to_number(autoplace_control["frequency"]) or 1)) -- inverse
-          controls_with_scale_table[ENTIRE_PREFIX .. name .. "-size"].text = util.number_to_string(util.map_gen_size_to_number(autoplace_control["size"]) or 1)
-        elseif valid_autoplace_controls[name].category == "enemy" then
-          enemies_table[ENTIRE_PREFIX .. name .. "-freq"].text = util.number_to_string(util.map_gen_size_to_number(autoplace_control["frequency"]) or 1)
-          enemies_table[ENTIRE_PREFIX .. name .. "-size"].text = util.number_to_string(util.map_gen_size_to_number(autoplace_control["size"]) or 1)
-        end
+  for name, control_prototype in pairs(valid_autoplace_controls) do
+    local check_wrapper_name = ENTIRE_PREFIX .. name .. "-check-wrapper"
+    local autoplace_control = autoplace_controls and autoplace_controls[name] or {}
+    if control_prototype.category == "resource" then
+      if resource_table[check_wrapper_name] and not resource_table[check_wrapper_name].check.state then
+        resource_table[ENTIRE_PREFIX .. name .. "-freq"].text = ""
+        resource_table[ENTIRE_PREFIX .. name .. "-size"].text = ""
+        resource_table[ENTIRE_PREFIX .. name .. "-richn"].text = ""
+      else
+        resource_table[ENTIRE_PREFIX .. name .. "-freq"].text = util.number_to_string(util.map_gen_size_to_number(autoplace_control["frequency"]) or 1)
+        resource_table[ENTIRE_PREFIX .. name .. "-size"].text = util.number_to_string(util.map_gen_size_to_number(autoplace_control["size"]) or 1)
+        resource_table[ENTIRE_PREFIX .. name .. "-richn"].text = util.number_to_string(util.map_gen_size_to_number(autoplace_control["richness"]) or 1)
+      end
+    elseif control_prototype.category == "terrain" and name ~= "planet-size" then -- planet size is a space exploration thing, we don't want the player to change it
+      if controls_with_scale_table[check_wrapper_name] and not controls_with_scale_table[check_wrapper_name].check.state then
+        controls_with_scale_table[ENTIRE_PREFIX .. name .. "-freq"].text = ""
+        controls_with_scale_table[ENTIRE_PREFIX .. name .. "-size"].text = ""
+      else
+        controls_with_scale_table[ENTIRE_PREFIX .. name .. "-freq"].text = util.number_to_string(1 / (util.map_gen_size_to_number(autoplace_control["frequency"]) or 1)) -- inverse
+        controls_with_scale_table[ENTIRE_PREFIX .. name .. "-size"].text = util.number_to_string(util.map_gen_size_to_number(autoplace_control["size"]) or 1)
+      end
+    elseif control_prototype.category == "enemy" then
+      if enemies_table[check_wrapper_name] and not enemies_table[check_wrapper_name].check.state then
+        enemies_table[ENTIRE_PREFIX .. name .. "-freq"].text = ""
+        enemies_table[ENTIRE_PREFIX .. name .. "-size"].text = ""
+      else
+        enemies_table[ENTIRE_PREFIX .. name .. "-freq"].text = util.number_to_string(util.map_gen_size_to_number(autoplace_control["frequency"]) or 1)
+        enemies_table[ENTIRE_PREFIX .. name .. "-size"].text = util.number_to_string(util.map_gen_size_to_number(autoplace_control["size"]) or 1)
       end
     end
   end
@@ -483,7 +530,7 @@ end
 
 -- returns map_gen_settings, can throw!
 -- param current_map_gen_settings only used for space exploration "planet-size" !!!
-map_gen_gui.read = function(parent, current_map_gen_settings)
+map_gen_gui.read = function(parent, surface, current_map_gen_settings)
   local expression_selectors_flow = parent[ENTIRE_PREFIX .. "gui-frame-2"][ENTIRE_PREFIX .. "expression-selectors-table"][ENTIRE_PREFIX .. "expression-selectors-flow"]
   local resource_table = parent[ENTIRE_PREFIX .. "gui-frame-1"][ENTIRE_PREFIX .. "resource-scroll-pane"][ENTIRE_PREFIX .."resource-table"]
   local controls_with_scale_table = parent[ENTIRE_PREFIX .. "gui-frame-2"][ENTIRE_PREFIX .. "terrain-scroll-pane"][ENTIRE_PREFIX .."controls-with-scale-table"]
@@ -520,23 +567,34 @@ map_gen_gui.read = function(parent, current_map_gen_settings)
   local autoplace_control_prototypes = prototypes.autoplace_control
   -- resources and terrain and enemies
   for _, control in pairs(autoplace_control_prototypes) do
+    local check_wrapper_name = ENTIRE_PREFIX .. control.name .. "-check-wrapper"
     if control.category == "resource" then
+      if resource_table[check_wrapper_name] and not resource_table[check_wrapper_name].check.state then
+        goto skip_unchecked_resource
+      end
       autoplace_controls_mine[control.name] = {
         frequency = util.textfield_to_number_with_error(resource_table[ENTIRE_PREFIX .. control.name .. "-freq"]),
         size = util.textfield_to_number_with_error(resource_table[ENTIRE_PREFIX .. control.name .. "-size"]),
         richness = util.textfield_to_number_with_error(resource_table[ENTIRE_PREFIX .. control.name .. "-richn"])
       }
     elseif control.category == "terrain" and control.name ~= "planet-size" then -- planet size is a space exploration thing, we don't want the player to change it
+      if controls_with_scale_table[check_wrapper_name] and not controls_with_scale_table[check_wrapper_name].check.state then
+        goto skip_unchecked_resource
+      end
       autoplace_controls_mine[control.name] = {
         frequency = 1 / util.textfield_to_number_with_error(controls_with_scale_table[ENTIRE_PREFIX .. control.name .. "-freq"]), -- inverse
         size = util.textfield_to_number_with_error(controls_with_scale_table[ENTIRE_PREFIX .. control.name .. "-size"])
       }
     elseif control.category == "enemy" then
+      if enemies_table[check_wrapper_name] and not enemies_table[check_wrapper_name].check.state then
+        goto skip_unchecked_resource
+      end
       autoplace_controls_mine[control.name] = {
         frequency = util.textfield_to_number_with_error(enemies_table[ENTIRE_PREFIX .. control.name .. "-freq"]),
         size = util.textfield_to_number_with_error(enemies_table[ENTIRE_PREFIX .. control.name .. "-size"])
       }
     end
+    ::skip_unchecked_resource::
   end
 
   -- but space explorations planet size still needs to be set!
